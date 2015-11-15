@@ -436,6 +436,24 @@ CodeMirror.defineMode("clike", function(config, parserConfig) {
     modeProps: {fold: ["brace", "import"]}
   });
 
+  def("text/x-console-out", {
+    name: "clike",
+    keywords: words("exit code"),
+    types: words(""),
+    blockKeywords: words(""),
+    defKeywords: words(""),
+    typeFirstDefinitions: true,
+    atoms: words(""),
+    endStatement: /^[;:]$/,
+    hooks: {
+      "@": function(stream) {
+        stream.eatWhile(/[\w\$_]/);
+        return "meta";
+      }
+    },
+    modeProps: {fold: ["brace", "import"]}
+  });
+
   def("text/x-csharp", {
     name: "clike",
     keywords: words("abstract as async await base break case catch checked class const continue" +

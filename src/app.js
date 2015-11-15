@@ -8,7 +8,7 @@ var fs = require("fs");
 var path = require("path");
 
 ezLogger(function () {
-  return __dirname + "/logs/" + Date.simple.more() + ".txt";
+  return __dirname + "/../logs/" + Date.simple.more() + ".txt";
 });
 
 var app = expressIO();
@@ -16,12 +16,23 @@ console.info("application initialized");
 
 app.http().io();
 
+app.use(expressIO.static(__dirname + "/public"));
+
 app.use(function (request, response, next) {
   console.log("[{method}] {headers.host}{url} from {ip}", request);
   next();
 });
 
-app.use(expressIO.static(__dirname + "/public"));
+var processList = [];
+
+app.io.route('kill', function (req) {
+  var data = req.data;
+
+  if (processList[data]) {
+    processList[data].kill();
+    delete processList[data];
+  }
+});
 
 app.io.route('execute', function (req) {
   var data = req.data;
@@ -29,6 +40,10 @@ app.io.route('execute', function (req) {
   var dir = path.resolve(os.tmpdir() + "/" + name);
   var className = /public class (\w+)/.exec(data)[1];
   var location = path.resolve(dir + "/" + className);
+
+  if(/Runtime|ProcessBuilder/i.exec(data)) {
+    return req.io.emit('error', 'no sir :( just no');
+  }
 
   fs.mkdir(dir, function (err) {
     if (err) {
@@ -40,24 +55,16 @@ app.io.route('execute', function (req) {
         return req.io.emit('error', err);
       }
 
+
       exec('javac ' + location + ".java", function (err, stdout, stderr) {
         if (err) {
           return req.io.emit('error', stderr.split(dir).join(""));
         }
 
-        var javaApp = spawn('java', [className], {cwd: dir}, function (err, stdout, stderr) {
-          if (err) {
-            return req.io.emit('error', stderr.split(dir).join(""));
-          }
+        console.log(data);
 
-          return req.io.emit('ok', stdout);
-        });
-
-        var kill = setTimeout(function () {
-          console.warn("{0} killed due timeout!", name);
-          kill = null;
-          javaApp.kill();
-        }, 10000);
+        var javaApp = spawn('java', [className], {cwd: dir});
+        console.info("{0} alive", name);
 
         javaApp.stdout.on('data', function (data) {
           req.io.emit('ok', data.toString());
@@ -68,9 +75,13 @@ app.io.route('execute', function (req) {
         });
 
         javaApp.on('exit', function (exitCode) {
-          if (kill != null) clearTimeout(kill);
-          req.io.emit('exitcode', "exit code: " + (exitCode == null ? "terminated due timeout" : exitCode));
+          console.info("{0} died, cause: {1}", name, exitCode == null ? "user" : exitCode == 0 ? "natural" : "run time error");
+          req.io.emit('exitcode', "exit code: {0} id: {1}".format((exitCode == null ? "killed" : exitCode), name));
         });
+
+        req.io.emit('alive', name);
+
+        processList[name] = javaApp;
       });
 
     });
